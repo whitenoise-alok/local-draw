@@ -146,6 +146,7 @@ vite.config.ts.timestamp-*
 __pycache__/
 *.pyc
 *.pyo
+.venv/
 
 # Local Draw
 backend/uploads/
