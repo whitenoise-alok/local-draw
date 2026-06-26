@@ -10,6 +10,133 @@ body {
   color: #1a1a1a;
 }
 
+/* ── Shared ─────────────────────────────────────── */
+
+.btn-primary {
+  padding: 8px 16px;
+  background: #1a1a1a;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background: #333;
+}
+
+.btn-delete {
+  padding: 6px 12px;
+  background: transparent;
+  color: #c0392b;
+  border: 1px solid #c0392b;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.btn-delete:hover {
+  background: #fdf0ef;
+}
+
+/* ── Topbar ──────────────────────────────────────── */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: #fff;
+  border-bottom: 1px solid #e5e5e5;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.app-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* ── List page ───────────────────────────────────── */
+
+.list-page {
+  max-width: 720px;
+  margin: 32px auto;
+  padding: 0 24px;
+}
+
+.canvas-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.canvas-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.canvas-item:hover {
+  border-color: #bbb;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.canvas-item:hover .btn-delete {
+  opacity: 1;
+}
+
+.canvas-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.canvas-name {
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin: -1px -4px;
+  outline: none;
+}
+
+.canvas-name.editing {
+  background: #f0f4ff;
+  outline: 2px solid #3b82f6;
+  white-space: normal;
+  overflow: visible;
+}
+
+.canvas-date {
+  font-size: 12px;
+  color: #888;
+}
+
+.empty-state {
+  text-align: center;
+  color: #888;
+  margin-top: 48px;
+  font-size: 15px;
+}
+
+/* ── Canvas editor placeholder ───────────────────── */
+
 .placeholder {
   display: flex;
   flex-direction: column;
@@ -26,4 +153,14 @@ body {
 
 .placeholder p {
   color: #666;
+}
+
+.placeholder a {
+  color: #3b82f6;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.placeholder a:hover {
+  text-decoration: underline;
 }

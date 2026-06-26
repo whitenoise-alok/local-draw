@@ -65,6 +65,21 @@ def save_canvas(canvas_id: str, body: dict):
     return {"ok": True}
 
 
+@app.patch("/api/canvases/{canvas_id}")
+def rename_canvas(canvas_id: str, body: dict):
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name cannot be empty")
+    now = datetime.now(timezone.utc)
+    result = canvases.update_one(
+        {"_id": ObjectId(canvas_id)},
+        {"$set": {"name": name, "updatedAt": now}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Canvas not found")
+    return {"ok": True}
+
+
 @app.delete("/api/canvases/{canvas_id}", status_code=204)
 def delete_canvas(canvas_id: str):
     result = canvases.delete_one({"_id": ObjectId(canvas_id)})
