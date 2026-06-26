@@ -7,9 +7,14 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <main class="placeholder">
-    <h1>Local Draw</h1>
-    <p>Your canvases will appear here.</p>
+  <header class="topbar">
+    <span class="app-title">Local Draw</span>
+    <button id="new-canvas-btn" class="btn-primary">+ New canvas</button>
+  </header>
+  <main class="list-page">
+    <ul id="canvas-list" class="canvas-list"></ul>
+    <p id="empty-state" class="empty-state" hidden>No canvases yet — create one to get started.</p>
   </main>
+  <script type="module" src="/src/ui/list.js"></script>
 </body>
 </html>
