@@ -6,11 +6,53 @@
   <title>Canvas — Local Draw</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
-<body>
-  <div class="placeholder">
-    <h1>Canvas editor</h1>
-    <p>Coming in issue #3.</p>
-    <a href="/">← Back to list</a>
+<body class="editor-body">
+  <div id="app">
+    <header class="editor-topbar">
+      <div class="topbar-left">
+        <a href="/" class="back-link">← Local Draw</a>
+        <span class="topbar-sep">|</span>
+        <span id="canvas-name" class="canvas-title">Loading…</span>
+      </div>
+      <div class="topbar-right">
+        <button id="undo-btn" class="btn-icon" disabled title="Undo (Ctrl+Z)">↩</button>
+        <button id="redo-btn" class="btn-icon" disabled title="Redo (Ctrl+Shift+Z)">↪</button>
+        <button id="export-btn" class="btn-secondary">Export SVG</button>
+      </div>
+    </header>
+    <div id="workspace">
+      <aside id="toolbar">
+        <button class="tool-btn active" data-tool="select" title="Select (V)">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 2v12l3-3 2 5 1.5-.5-2-5h4L4 2z"/></svg>
+        </button>
+        <button class="tool-btn" data-tool="pan" title="Pan (H)">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 4v6M11 3v7M14 5v5M5 10v3a6 6 0 0 0 10 0v-3M5 10a1.5 1.5 0 0 1 3 0"/></svg>
+        </button>
+        <div class="toolbar-sep"></div>
+        <button class="tool-btn" data-tool="rect" title="Rectangle (R)">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="14" height="10" rx="1"/></svg>
+        </button>
+        <button class="tool-btn" data-tool="text" title="Text (T)">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 5v2h5.5v9h2V7H17V5H4z"/></svg>
+        </button>
+        <button class="tool-btn" data-tool="line" title="Line (L)">
+          <svg viewBox="0 0 20 20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="16" x2="16" y2="4"/></svg>
+        </button>
+        <button class="tool-btn" data-tool="arrow" title="Arrow (A)">
+          <svg viewBox="0 0 20 20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><line x1="4" y1="16" x2="14" y2="6"/><polyline points="8,6 14,6 14,12"/></svg>
+        </button>
+        <button class="tool-btn" data-tool="image" title="Image (I)">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="16" height="12" rx="1"/><circle cx="7" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><polyline points="2,14 7,9 11,13 14,10 18,14"/></svg>
+        </button>
+        <button class="tool-btn" data-tool="eraser" title="Eraser (E)">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 17H8L4 13 12 5l5 5-3 3"/><line x1="7" y1="11" x2="13" y2="17"/></svg>
+        </button>
+      </aside>
+      <div id="canvas-wrap">
+        <canvas id="canvas"></canvas>
+      </div>
+    </div>
   </div>
+  <script type="module" src="/src/editor.js"></script>
 </body>
 </html>

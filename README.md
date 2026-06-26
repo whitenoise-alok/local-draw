@@ -131,6 +131,55 @@ curl -s http://localhost:8000/api/canvases | python3 -m json.tool
 
 ---
 
+### Issue #3 — Canvas editor shell and infinite canvas
+
+Create a canvas first if you don't have one:
+```bash
+curl -s -X POST http://localhost:8000/api/canvases \
+  -H "Content-Type: application/json" -d '{"name": "Test"}' | python3 -m json.tool
+# copy the "id" from the response
+```
+
+Open `http://localhost:8000/canvas.html?id=<id>` in a browser, then:
+
+**1. Editor loads**
+- You should see the topbar with the canvas name, undo/redo/export buttons, and the left toolbar.
+- The canvas area shows a dot grid.
+
+**2. Toolbar — all 8 tools visible**
+- Left sidebar has: Select (↖), Pan (hand), Rectangle, Text, Line, Arrow, Image, Eraser.
+- Clicking a tool highlights it in blue.
+
+**3. Keyboard shortcuts**
+- Press `V` — Select tool becomes active.
+- Press `H` — Pan tool becomes active.
+
+**4. Pan with the pan tool**
+- Click the pan tool (or press `H`).
+- Click and drag anywhere on the canvas — the dot grid moves with the mouse.
+- Release — grid stays at the new position.
+
+**5. Spacebar pan**
+- While on any tool, hold `Space` — cursor changes to a hand.
+- Drag to pan.
+- Release `Space` — returns to the previous tool.
+
+**6. Zoom**
+- Ctrl+scroll (or pinch on trackpad) — canvas zooms in/out around the cursor.
+- The dot grid scales with zoom (dots get further apart as you zoom in).
+
+**7. Coordinate system**
+- Open the browser console and run:
+  ```js
+  import('/src/editor.js').then(m => console.log(m.canvasToScreen(100, 100)))
+  ```
+- Pan and zoom, run again — the screen coordinates change correctly relative to pan/zoom.
+
+**8. No edge or boundary**
+- Pan in any direction indefinitely — no edge, no boundary, no scroll bar.
+
+---
+
 ## Project structure
 
 ```
@@ -138,11 +187,13 @@ local-draw/
   start.sh                    — starts mongod + uvicorn
   frontend/
     index.html                — canvas list page
-    canvas.html               — canvas editor (placeholder until issue #3)
+    canvas.html               — canvas editor
     styles.css
     src/
+      editor.js               — viewport, pan, zoom, grid, tool management
       core/
         api.js                — fetch wrappers for all API calls
+        scene.js              — scene graph (elements CRUD)
       ui/
         list.js               — canvas list page logic
   backend/
