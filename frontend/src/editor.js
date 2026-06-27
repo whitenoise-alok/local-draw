@@ -247,9 +247,14 @@ canvasEl.addEventListener('mousedown', (e) => {
   }
 });
 
-canvasEl.addEventListener('dblclick', (e) => {
+// Listen on window: in text mode the textarea overlay can intercept the 2nd click
+// of a double-click, moving the dblclick target off canvasEl entirely.
+window.addEventListener('dblclick', (e) => {
   const r = canvasEl.getBoundingClientRect();
-  const pt = screenToCanvas(e.clientX - r.left, e.clientY - r.top);
+  const x = e.clientX - r.left;
+  const y = e.clientY - r.top;
+  if (x < 0 || y < 0 || x > r.width || y > r.height) return;
+  const pt = screenToCanvas(x, y);
   const hit = [...scene.elements]
     .filter(el => el.type === 'text')
     .find(el => {
@@ -259,7 +264,7 @@ canvasEl.addEventListener('dblclick', (e) => {
         && pt.y <= el.y + el.fontSize * 1.4 * lines;
     });
   if (hit) {
-    if (activeToolName !== 'text') setTool('text');  // skip cancel() if already in text mode
+    if (activeToolName !== 'text') setTool('text');
     tools.text.editExisting(hit, r);
   }
 });
