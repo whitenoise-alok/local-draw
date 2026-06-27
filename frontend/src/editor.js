@@ -3,6 +3,7 @@ import { createScene, addElement, removeElement, updateElement, nextOrder } from
 import { createHistory, historyPush, historyUndo, historyRedo, canUndo, canRedo } from './core/history.js';
 import { createRectTool, drawRect } from './tools/rect.js';
 import { createTextTool, drawText, hitTestText } from './tools/text.js';
+import { createLineTool, createArrowTool, drawLine, drawArrow, midpointHandle } from './tools/line.js';
 import { renderProperties } from './ui/properties.js';
 
 // ── Bootstrap ─────────────────────────────────────────────────
@@ -31,6 +32,8 @@ let hist = createHistory(scene);
 // ── Tools ─────────────────────────────────────────────────────
 const tools = {
   rect: createRectTool(),
+  line: createLineTool(),
+  arrow: createArrowTool(),
   text: createTextTool({
     getVp: () => vp,
     onOpen: (el) => {
@@ -64,11 +67,70 @@ let activeToolName = 'select';
 let prevTool = null;
 let spaceDown = false;
 
+// ── Select-tool handle state ──────────────────────────────────
+const HANDLE_R = 6;
+let selectedEl = null;
+let draggingHandle = null; // 'start' | 'end' | 'mid'
+
+function hitHandle(pt, el) {
+  const handles = lineHandles(el);
+  const hit = (hx, hy) => Math.hypot(pt.x - hx, pt.y - hy) <= HANDLE_R + 2;
+  if (hit(handles.start.x, handles.start.y)) return 'start';
+  if (hit(handles.end.x, handles.end.y)) return 'end';
+  if (hit(handles.mid.x, handles.mid.y)) return 'mid';
+  return null;
+}
+
+function lineHandles(el) {
+  const mid = midpointHandle(el.x1, el.y1, el.x2, el.y2, el.cp1, el.cp2);
+  return { start: { x: el.x1, y: el.y1 }, end: { x: el.x2, y: el.y2 }, mid };
+}
+
+function hitTestLine(pt, el) {
+  const THRESH = 8;
+  const steps = 20;
+  if (!el.cp1 || !el.cp2) {
+    // Straight line: distance from point to segment
+    const dx = el.x2 - el.x1, dy = el.y2 - el.y1;
+    const len2 = dx*dx + dy*dy;
+    if (len2 === 0) return Math.hypot(pt.x - el.x1, pt.y - el.y1) <= THRESH;
+    const t = Math.max(0, Math.min(1, ((pt.x - el.x1)*dx + (pt.y - el.y1)*dy) / len2));
+    return Math.hypot(pt.x - (el.x1 + t*dx), pt.y - (el.y1 + t*dy)) <= THRESH;
+  }
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps, mt = 1 - t;
+    const bx = mt*mt*mt*el.x1 + 3*mt*mt*t*el.cp1.x + 3*mt*t*t*el.cp2.x + t*t*t*el.x2;
+    const by = mt*mt*mt*el.y1 + 3*mt*mt*t*el.cp1.y + 3*mt*t*t*el.cp2.y + t*t*t*el.y2;
+    if (Math.hypot(pt.x - bx, pt.y - by) <= THRESH) return true;
+  }
+  return false;
+}
+
+function drawHandles(c, el) {
+  const handles = lineHandles(el);
+  c.save();
+  c.fillStyle = '#fff';
+  c.strokeStyle = '#0066ff';
+  c.lineWidth = 1.5;
+  [handles.start, handles.end].forEach(h => {
+    c.beginPath();
+    c.arc(h.x, h.y, HANDLE_R, 0, Math.PI * 2);
+    c.fill(); c.stroke();
+  });
+  c.fillStyle = '#0066ff';
+  c.beginPath();
+  c.arc(handles.mid.x, handles.mid.y, HANDLE_R - 1, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+}
+
 // ── Element rendering ─────────────────────────────────────────
 function renderElement(c, el) {
   if (tools.text.getEditingId() === el.id) return;
   if (el.type === 'rect') drawRect(c, el, el);
   if (el.type === 'text') drawText(c, el);
+  if (el.type === 'line') drawLine(c, el);
+  if (el.type === 'arrow') drawArrow(c, el);
 }
 
 // ── Grid ──────────────────────────────────────────────────────
@@ -107,6 +169,11 @@ function render() {
 
   tools[activeToolName]?.renderPreview?.(ctx);
 
+  if (selectedEl && (selectedEl.type === 'line' || selectedEl.type === 'arrow')) {
+    const live = scene.elements.find(e => e.id === selectedEl.id);
+    if (live) drawHandles(ctx, live);
+  }
+
   ctx.restore();
 }
 
@@ -124,6 +191,10 @@ function commitElement(el) {
   hist = historyPush(hist, scene);
   updateHistoryButtons();
   scheduleAutoSave();
+  if (el.type === 'line' || el.type === 'arrow') {
+    selectedEl = el;
+    setTool('select');
+  }
   render();
 }
 
@@ -213,6 +284,7 @@ const CURSOR = {
 function setTool(name) {
   tools[activeToolName]?.cancel?.();
   activeToolName = name;
+  if (name !== 'select') { selectedEl = null; draggingHandle = null; }
   canvasEl.style.cursor = CURSOR[name] ?? 'default';
   document.querySelectorAll('.tool-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tool === name);
@@ -250,6 +322,23 @@ canvasEl.addEventListener('mousedown', (e) => {
     tools.text.editExisting(textHit, r);
     return;
   }
+  if (activeToolName === 'select') {
+    // Check if clicking a handle on selected line/arrow
+    if (selectedEl) {
+      const live = scene.elements.find(e => e.id === selectedEl.id);
+      if (live && (live.type === 'line' || live.type === 'arrow')) {
+        const h = hitHandle(pt, live);
+        if (h) { draggingHandle = h; return; }
+      }
+    }
+    // Click to select a line/arrow
+    const lineHit = scene.elements.find(el =>
+      (el.type === 'line' || el.type === 'arrow') && hitTestLine(pt, el)
+    );
+    selectedEl = lineHit ?? null;
+    render();
+    return;
+  }
   tools[activeToolName]?.pointerdown(pt);
 });
 
@@ -263,6 +352,28 @@ window.addEventListener('mousemove', (e) => {
   }
   const r = canvasEl.getBoundingClientRect();
   const pt = screenToCanvas(e.clientX - r.left, e.clientY - r.top);
+  if (draggingHandle && selectedEl) {
+    const live = scene.elements.find(e => e.id === selectedEl.id);
+    if (live) {
+      if (draggingHandle === 'start') {
+        scene = updateElement(scene, live.id, { x1: pt.x, y1: pt.y });
+      } else if (draggingHandle === 'end') {
+        scene = updateElement(scene, live.id, { x2: pt.x, y2: pt.y });
+      } else if (draggingHandle === 'mid') {
+        // B(0.5) = M + (3/2)*d where CP1=P0+2d, CP2=P3+2d → d = (pt-M)*(2/3)
+        const mx = (live.x1 + live.x2) / 2;
+        const my = (live.y1 + live.y2) / 2;
+        const dx = (pt.x - mx) * (4 / 3);
+        const dy = (pt.y - my) * (4 / 3);
+        scene = updateElement(scene, live.id, {
+          cp1: { x: live.x1 + dx, y: live.y1 + dy },
+          cp2: { x: live.x2 + dx, y: live.y2 + dy },
+        });
+      }
+      render();
+    }
+    return;
+  }
   if (tools[activeToolName]?.pointermove(pt)) render();
 });
 
@@ -270,6 +381,14 @@ window.addEventListener('mouseup', (e) => {
   if (panning) {
     panning = false;
     canvasEl.style.cursor = spaceDown ? 'grab' : (CURSOR[activeToolName] ?? 'default');
+    return;
+  }
+  if (draggingHandle) {
+    draggingHandle = null;
+    hist = historyPush(hist, scene);
+    updateHistoryButtons();
+    scheduleAutoSave();
+    render();
     return;
   }
   const r = canvasEl.getBoundingClientRect();

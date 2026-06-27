@@ -23,6 +23,12 @@ export function renderProperties(bar, toolName, tool) {
     bar.appendChild(widthGroup(s.strokeWidth, w => tool.setStyle({ strokeWidth: w })));
     bar.appendChild(strokeStyleGroup(s.strokeStyle, ss => tool.setStyle({ strokeStyle: ss })));
   }
+  if ((toolName === 'line' || toolName === 'arrow') && tool) {
+    const s = tool.getStyle();
+    bar.appendChild(colorGroup('Stroke', PALETTE, s.strokeColor, c => tool.setStyle({ strokeColor: c })));
+    bar.appendChild(widthGroup(s.strokeWidth, w => tool.setStyle({ strokeWidth: w })));
+    bar.appendChild(strokeStyleGroup(s.strokeStyle, ss => tool.setStyle({ strokeStyle: ss })));
+  }
   if (toolName === 'text' && tool) {
     const s = tool.getStyle();
     bar.appendChild(fontFamilyGroup(s.fontFamily, f => tool.setStyle({ fontFamily: f })));
