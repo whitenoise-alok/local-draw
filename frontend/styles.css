@@ -404,3 +404,34 @@ html {
   left: 0;
   display: block;
 }
+
+/* ── Text editor overlay ─────────────────────────── */
+
+.text-editor-overlay {
+  position: fixed;
+  z-index: 100;
+  min-width: 120px;
+  min-height: 1.4em;
+  padding: 0;
+  border: 1.5px dashed #1971c2;
+  border-radius: 2px;
+  background: transparent;
+  resize: none;
+  outline: none;
+  line-height: 1.4;
+  overflow: hidden;
+  white-space: pre;
+  field-sizing: content;
+}
+
+/* ── Properties: font select ─────────────────────── */
+
+.prop-select {
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
