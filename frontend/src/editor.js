@@ -4,6 +4,7 @@ import { createHistory, historyPush, historyUndo, historyRedo, canUndo, canRedo 
 import { createRectTool, drawRect } from './tools/rect.js';
 import { createTextTool, drawText, hitTestText } from './tools/text.js';
 import { createLineTool, createArrowTool, drawLine, drawArrow, midpointHandle } from './tools/line.js';
+import { createEraserTool } from './tools/eraser.js';
 import { renderProperties } from './ui/properties.js';
 
 // ── Bootstrap ─────────────────────────────────────────────────
@@ -34,6 +35,18 @@ const tools = {
   rect: createRectTool(),
   line: createLineTool(),
   arrow: createArrowTool(),
+  eraser: createEraserTool({
+    getScene: () => scene,
+    onDeleteElement: (id) => {
+      scene = removeElement(scene, id);
+      render();
+    },
+    onCommit: () => {
+      hist = historyPush(hist, scene);
+      updateHistoryButtons();
+      scheduleAutoSave();
+    },
+  }),
   text: createTextTool({
     getVp: () => vp,
     onOpen: (el) => {
@@ -316,7 +329,8 @@ canvasEl.addEventListener('mousedown', (e) => {
     tools.text.pointerdown(pt, r);
     return;
   }
-  const textHit = scene.elements.find(el => el.type === 'text' && hitTestText(pt, el));
+  const textHit = activeToolName !== 'eraser'
+    && scene.elements.find(el => el.type === 'text' && hitTestText(pt, el));
   if (textHit) {
     if (activeToolName !== 'text') setTool('text');
     tools.text.editExisting(textHit, r);
