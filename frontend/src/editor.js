@@ -2,7 +2,7 @@ import { getCanvas, saveCanvas } from './core/api.js';
 import { createScene, addElement, removeElement, updateElement, nextOrder } from './core/scene.js';
 import { createHistory, historyPush, historyUndo, historyRedo, canUndo, canRedo } from './core/history.js';
 import { createRectTool, drawRect } from './tools/rect.js';
-import { createTextTool, drawText } from './tools/text.js';
+import { createTextTool, drawText, hitTestText } from './tools/text.js';
 import { renderProperties } from './ui/properties.js';
 
 // ── Bootstrap ─────────────────────────────────────────────────
@@ -242,31 +242,15 @@ canvasEl.addEventListener('mousedown', (e) => {
   const pt = screenToCanvas(e.clientX - r.left, e.clientY - r.top);
   if (activeToolName === 'text') {
     tools.text.pointerdown(pt, r);
-  } else {
-    tools[activeToolName]?.pointerdown(pt);
+    return;
   }
-});
-
-// Listen on window: in text mode the textarea overlay can intercept the 2nd click
-// of a double-click, moving the dblclick target off canvasEl entirely.
-window.addEventListener('dblclick', (e) => {
-  const r = canvasEl.getBoundingClientRect();
-  const x = e.clientX - r.left;
-  const y = e.clientY - r.top;
-  if (x < 0 || y < 0 || x > r.width || y > r.height) return;
-  const pt = screenToCanvas(x, y);
-  const hit = [...scene.elements]
-    .filter(el => el.type === 'text')
-    .find(el => {
-      const lines = el.content?.split('\n').length ?? 1;
-      return pt.x >= el.x && pt.y >= el.y
-        && pt.x <= el.x + 400
-        && pt.y <= el.y + el.fontSize * 1.4 * lines;
-    });
-  if (hit) {
+  const textHit = scene.elements.find(el => el.type === 'text' && hitTestText(pt, el));
+  if (textHit) {
     if (activeToolName !== 'text') setTool('text');
-    tools.text.editExisting(hit, r);
+    tools.text.editExisting(textHit, r);
+    return;
   }
+  tools[activeToolName]?.pointerdown(pt);
 });
 
 window.addEventListener('mousemove', (e) => {
