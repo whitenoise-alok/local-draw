@@ -52,6 +52,7 @@ export function createTextTool({ getVp, onOpen, onFinalize, onReplace, onCancel,
   let activeEl = null;
   let textarea = null;
   let isNew = false;
+  let pendingEditId = null; // suppresses canvas render during editExisting cleanup
 
   function openTextarea(el, canvasRect) {
     removeTextarea();
@@ -124,13 +125,15 @@ export function createTextTool({ getVp, onOpen, onFinalize, onReplace, onCancel,
   }
 
   function editExisting(el, canvasRect) {
+    pendingEditId = el.id;  // keep element off canvas during commit()'s cleanup render
     commit();
     activeEl = { ...el };
     isNew = false;
+    pendingEditId = null;   // activeEl.id now handles suppression
     openTextarea({ ...el }, canvasRect);
   }
 
-  function getEditingId() { return activeEl?.id ?? null; }
+  function getEditingId() { return activeEl?.id ?? pendingEditId; }
   function getStyle() { return { ...style }; }
   function setStyle(props) { Object.assign(style, props); }
 
