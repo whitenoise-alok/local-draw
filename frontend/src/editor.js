@@ -1,7 +1,8 @@
 import { getCanvas, saveCanvas } from './core/api.js';
-import { createScene, addElement, nextOrder } from './core/scene.js';
+import { createScene, addElement, removeElement, updateElement, nextOrder } from './core/scene.js';
 import { createHistory, historyPush, historyUndo, historyRedo, canUndo, canRedo } from './core/history.js';
 import { createRectTool, drawRect } from './tools/rect.js';
+import { createTextTool, drawText } from './tools/text.js';
 import { renderProperties } from './ui/properties.js';
 
 // ── Bootstrap ─────────────────────────────────────────────────
@@ -30,6 +31,33 @@ let hist = createHistory(scene);
 // ── Tools ─────────────────────────────────────────────────────
 const tools = {
   rect: createRectTool(),
+  text: createTextTool({
+    getVp: () => vp,
+    onOpen: (el) => {
+      scene = addElement(scene, { ...el, order: nextOrder(scene) });
+      render();
+    },
+    onFinalize: () => {
+      hist = historyPush(hist, scene);
+      updateHistoryButtons();
+      scheduleAutoSave();
+    },
+    onReplace: (el) => {
+      scene = updateElement(scene, el.id, el);
+      hist = historyPush(hist, scene);
+      updateHistoryButtons();
+      scheduleAutoSave();
+      render();
+    },
+    onCancel: (id) => {
+      scene = removeElement(scene, id);
+      render();
+    },
+    onUpdate: (id, props) => {
+      scene = updateElement(scene, id, props);
+      render();
+    },
+  }),
 };
 
 let activeToolName = 'select';
@@ -39,6 +67,7 @@ let spaceDown = false;
 // ── Element rendering ─────────────────────────────────────────
 function renderElement(c, el) {
   if (el.type === 'rect') drawRect(c, el, el);
+  if (el.type === 'text') drawText(c, el);
 }
 
 // ── Grid ──────────────────────────────────────────────────────
@@ -132,11 +161,13 @@ function generateThumbnail() {
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   scene.elements.forEach(el => {
-    if (el.x != null && el.width != null) {
+    const w = el.width ?? (el.type === 'text' ? 200 : null);
+    const h = el.height ?? (el.type === 'text' ? el.fontSize * 1.4 : null);
+    if (el.x != null && w != null) {
       minX = Math.min(minX, el.x);
       minY = Math.min(minY, el.y);
-      maxX = Math.max(maxX, el.x + el.width);
-      maxY = Math.max(maxY, el.y + el.height);
+      maxX = Math.max(maxX, el.x + w);
+      maxY = Math.max(maxY, el.y + h);
     }
   });
   if (!isFinite(minX)) return '';
@@ -208,7 +239,28 @@ canvasEl.addEventListener('mousedown', (e) => {
   }
   const r = canvasEl.getBoundingClientRect();
   const pt = screenToCanvas(e.clientX - r.left, e.clientY - r.top);
-  tools[activeToolName]?.pointerdown(pt);
+  if (activeToolName === 'text') {
+    tools.text.pointerdown(pt, r);
+  } else {
+    tools[activeToolName]?.pointerdown(pt);
+  }
+});
+
+canvasEl.addEventListener('dblclick', (e) => {
+  const r = canvasEl.getBoundingClientRect();
+  const pt = screenToCanvas(e.clientX - r.left, e.clientY - r.top);
+  const hit = [...scene.elements]
+    .filter(el => el.type === 'text')
+    .find(el => {
+      const lines = el.content?.split('\n').length ?? 1;
+      return pt.x >= el.x && pt.y >= el.y
+        && pt.x <= el.x + 400
+        && pt.y <= el.y + el.fontSize * 1.4 * lines;
+    });
+  if (hit) {
+    if (activeToolName !== 'text') setTool('text');  // skip cancel() if already in text mode
+    tools.text.editExisting(hit, r);
+  }
 });
 
 window.addEventListener('mousemove', (e) => {
