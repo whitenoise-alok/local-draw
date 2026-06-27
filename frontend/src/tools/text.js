@@ -130,8 +130,9 @@ export function createTextTool({ getVp, onOpen, onFinalize, onReplace, onCancel,
     openTextarea({ ...el }, canvasRect);
   }
 
+  function getEditingId() { return activeEl?.id ?? null; }
   function getStyle() { return { ...style }; }
   function setStyle(props) { Object.assign(style, props); }
 
-  return { pointerdown, cancel, editExisting, getStyle, setStyle };
+  return { pointerdown, cancel, editExisting, getEditingId, getStyle, setStyle };
 }

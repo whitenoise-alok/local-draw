@@ -66,6 +66,7 @@ let spaceDown = false;
 
 // ── Element rendering ─────────────────────────────────────────
 function renderElement(c, el) {
+  if (tools.text.getEditingId() === el.id) return;
   if (el.type === 'rect') drawRect(c, el, el);
   if (el.type === 'text') drawText(c, el);
 }
