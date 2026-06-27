@@ -13,17 +13,36 @@ export function fontString(el) {
 }
 
 export function drawText(ctx, el) {
-  if (!el.content) return;
   ctx.save();
   ctx.globalAlpha = el.opacity ?? 1;
-  ctx.fillStyle = el.color ?? '#000000';
   ctx.font = fontString(el);
   ctx.textBaseline = 'top';
   const lineH = el.fontSize * 1.4;
-  el.content.split('\n').forEach((line, i) => {
-    ctx.fillText(line, el.x, el.y + i * lineH);
-  });
+  const lines = (el.content ?? '').split('\n');
+
+  const measuredWidth = lines.reduce((max, line) => Math.max(max, ctx.measureText(line).width), 0);
+  const w = measuredWidth || el.fontSize * 5;
+  const h = lines.length * lineH;
+  ctx.strokeStyle = '#999999';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.strokeRect(el.x, el.y, w, h);
+  ctx.setLineDash([]);
+
+  if (el.content) {
+    ctx.fillStyle = el.color ?? '#000000';
+    lines.forEach((line, i) => {
+      ctx.fillText(line, el.x, el.y + i * lineH);
+    });
+  }
   ctx.restore();
+}
+
+export function hitTestText(pt, el) {
+  const lines = el.content?.split('\n').length ?? 1;
+  return pt.x >= el.x && pt.y >= el.y
+    && pt.x <= el.x + 400
+    && pt.y <= el.y + el.fontSize * 1.4 * lines;
 }
 
 export function createTextElement(pt, style) {
