@@ -44,3 +44,11 @@ export async function deleteCanvas(id) {
   const res = await fetch(`${BASE}/canvases/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error('Failed to delete canvas');
 }
+
+export async function uploadImage(file) {
+  const body = new FormData();
+  body.append('file', file);
+  const res = await fetch(`${BASE}/uploads`, { method: 'POST', body });
+  if (!res.ok) throw new Error('Failed to upload image');
+  return (await res.json()).filename;
+}

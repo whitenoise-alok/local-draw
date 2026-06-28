@@ -1,8 +1,10 @@
 import os
+import shutil
+import uuid
 from datetime import datetime, timezone
 
 from bson import ObjectId
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from pymongo import MongoClient
 
@@ -89,6 +91,16 @@ def delete_canvas(canvas_id: str):
 
 UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOADS_DIR, exist_ok=True)
+
+
+@app.post("/api/uploads", status_code=201)
+def upload_image(file: UploadFile = File(...)):
+    ext = os.path.splitext(file.filename or "")[1]
+    filename = f"{uuid.uuid4().hex}{ext}"
+    with open(os.path.join(UPLOADS_DIR, filename), "wb") as out:
+        shutil.copyfileobj(file.file, out)
+    return {"filename": filename}
+
 
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "..", "frontend"), html=True), name="frontend")
