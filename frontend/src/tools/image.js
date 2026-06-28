@@ -28,13 +28,12 @@ export function createImageTool({ onPick }) {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.style.display = 'none';
     input.addEventListener('change', () => {
       const file = input.files?.[0];
-      input.remove();
       if (file) onPick(file);
     });
-    document.body.appendChild(input);
+    // Detached input: the dialog opens on click within the user gesture, and
+    // there is no hidden element left in the DOM if the dialog is cancelled.
     input.click();
   }
   return { openPicker };
