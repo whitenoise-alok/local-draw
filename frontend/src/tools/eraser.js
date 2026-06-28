@@ -1,4 +1,5 @@
 import { hitTestText } from './text.js';
+import { hitTestImage } from './image.js';
 
 export function hitTestRect(pt, el) {
   return pt.x >= el.x && pt.x <= el.x + el.width
@@ -33,6 +34,7 @@ export function hitTestElement(pt, el) {
   if (el.type === 'rect') return hitTestRect(pt, el);
   if (el.type === 'line' || el.type === 'arrow') return hitTestLine(pt, el);
   if (el.type === 'text') return hitTestText(pt, el);
+  if (el.type === 'image') return hitTestImage(pt, el);
   return false;
 }
 

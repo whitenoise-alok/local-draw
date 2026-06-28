@@ -1,10 +1,11 @@
-import { getCanvas, saveCanvas } from './core/api.js';
+import { getCanvas, saveCanvas, uploadImage } from './core/api.js';
 import { createScene, addElement, removeElement, updateElement, nextOrder } from './core/scene.js';
 import { createHistory, historyPush, historyUndo, historyRedo, canUndo, canRedo } from './core/history.js';
 import { createRectTool, drawRect } from './tools/rect.js';
 import { createTextTool, drawText, hitTestText } from './tools/text.js';
 import { createLineTool, createArrowTool, drawLine, drawArrow, midpointHandle } from './tools/line.js';
 import { createEraserTool } from './tools/eraser.js';
+import { createImageTool, createImageElement, drawImage, hitTestImage, imageHandles, resizeImage } from './tools/image.js';
 import { renderProperties } from './ui/properties.js';
 
 // ── Bootstrap ─────────────────────────────────────────────────
@@ -24,6 +25,31 @@ const vp = { pan: { x: 0, y: 0 }, zoom: 1 };
 
 function screenToCanvas(sx, sy) {
   return { x: (sx - vp.pan.x) / vp.zoom, y: (sy - vp.pan.y) / vp.zoom };
+}
+
+// ── Image asset cache ─────────────────────────────────────────
+// Caches the HTMLImageElement per filename. Returns it only once loaded so
+// drawImage never receives an incomplete image; triggers a re-render on load.
+const imageCache = new Map();
+
+function getImage(filename) {
+  let img = imageCache.get(filename);
+  if (!img) {
+    img = new Image();
+    img.addEventListener('load', render);
+    img.src = `/uploads/${filename}`;
+    imageCache.set(filename, img);
+  }
+  return img.complete && img.naturalWidth > 0 ? img : null;
+}
+
+function loadImageEl(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
 }
 
 // ── State ─────────────────────────────────────────────────────
@@ -76,6 +102,27 @@ const tools = {
   }),
 };
 
+// Image tool: opens the file picker, uploads the chosen image asset, then
+// inserts an image element at the centre of the viewport.
+const imageTool = createImageTool({
+  onPick: async (file) => {
+    try {
+      const filename = await uploadImage(file);
+      const img = await loadImageEl(`/uploads/${filename}`);
+      imageCache.set(filename, img);
+      const center = screenToCanvas(canvasEl.width / 2, canvasEl.height / 2);
+      const el = createImageElement(filename, img.naturalWidth, img.naturalHeight, center);
+      commitElement(el);
+      selectedEl = el;
+      setTool('select');
+      render();
+    } catch (err) {
+      console.error('Image upload failed:', err);
+      alert('Failed to upload image.');
+    }
+  },
+});
+
 let activeToolName = 'select';
 let prevTool = null;
 let spaceDown = false;
@@ -83,7 +130,32 @@ let spaceDown = false;
 // ── Select-tool handle state ──────────────────────────────────
 const HANDLE_R = 6;
 let selectedEl = null;
-let draggingHandle = null; // 'start' | 'end' | 'mid'
+let draggingHandle = null; // line: 'start'|'end'|'mid' — image: 'nw'|'ne'|'sw'|'se'
+let movingImage = null;    // { offsetX, offsetY, moved } while dragging an image body
+
+function hitImageHandle(pt, el) {
+  const handles = imageHandles(el);
+  for (const [name, h] of Object.entries(handles)) {
+    if (Math.abs(pt.x - h.x) <= HANDLE_R + 2 && Math.abs(pt.y - h.y) <= HANDLE_R + 2) return name;
+  }
+  return null;
+}
+
+function drawImageSelection(c, el) {
+  c.save();
+  c.strokeStyle = '#0066ff';
+  c.lineWidth = 1.5;
+  c.setLineDash([]);
+  c.strokeRect(el.x, el.y, el.width, el.height);
+  c.fillStyle = '#fff';
+  Object.values(imageHandles(el)).forEach(h => {
+    c.beginPath();
+    c.rect(h.x - HANDLE_R, h.y - HANDLE_R, HANDLE_R * 2, HANDLE_R * 2);
+    c.fill();
+    c.stroke();
+  });
+  c.restore();
+}
 
 function hitHandle(pt, el) {
   const handles = lineHandles(el);
@@ -144,6 +216,7 @@ function renderElement(c, el) {
   if (el.type === 'text') drawText(c, el);
   if (el.type === 'line') drawLine(c, el);
   if (el.type === 'arrow') drawArrow(c, el);
+  if (el.type === 'image') drawImage(c, el, getImage(el.filename));
 }
 
 // ── Grid ──────────────────────────────────────────────────────
@@ -185,6 +258,11 @@ function render() {
   if (selectedEl && (selectedEl.type === 'line' || selectedEl.type === 'arrow')) {
     const live = scene.elements.find(e => e.id === selectedEl.id);
     if (live) drawHandles(ctx, live);
+  }
+
+  if (selectedEl && selectedEl.type === 'image') {
+    const live = scene.elements.find(e => e.id === selectedEl.id);
+    if (live) drawImageSelection(ctx, live);
   }
 
   ctx.restore();
@@ -295,9 +373,14 @@ const CURSOR = {
 };
 
 function setTool(name) {
+  if (name === 'image') {
+    // Image insertion is a one-shot file picker, not a persistent canvas mode.
+    imageTool.openPicker();
+    return;
+  }
   tools[activeToolName]?.cancel?.();
   activeToolName = name;
-  if (name !== 'select') { selectedEl = null; draggingHandle = null; }
+  if (name !== 'select') { selectedEl = null; draggingHandle = null; movingImage = null; }
   canvasEl.style.cursor = CURSOR[name] ?? 'default';
   document.querySelectorAll('.tool-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tool === name);
@@ -337,19 +420,29 @@ canvasEl.addEventListener('mousedown', (e) => {
     return;
   }
   if (activeToolName === 'select') {
-    // Check if clicking a handle on selected line/arrow
+    // Check if clicking a handle on the selected element
     if (selectedEl) {
       const live = scene.elements.find(e => e.id === selectedEl.id);
       if (live && (live.type === 'line' || live.type === 'arrow')) {
         const h = hitHandle(pt, live);
         if (h) { draggingHandle = h; return; }
       }
+      if (live && live.type === 'image') {
+        const h = hitImageHandle(pt, live);
+        if (h) { draggingHandle = h; return; }
+      }
     }
-    // Click to select a line/arrow
-    const lineHit = scene.elements.find(el =>
+    // Topmost image under the pointer wins; fall back to a line/arrow.
+    const imageHit = [...scene.elements]
+      .sort((a, b) => (b.order ?? 0) - (a.order ?? 0))
+      .find(el => el.type === 'image' && hitTestImage(pt, el));
+    const lineHit = !imageHit && scene.elements.find(el =>
       (el.type === 'line' || el.type === 'arrow') && hitTestLine(pt, el)
     );
-    selectedEl = lineHit ?? null;
+    selectedEl = imageHit ?? lineHit ?? null;
+    if (imageHit) {
+      movingImage = { offsetX: pt.x - imageHit.x, offsetY: pt.y - imageHit.y, moved: false };
+    }
     render();
     return;
   }
@@ -366,10 +459,21 @@ window.addEventListener('mousemove', (e) => {
   }
   const r = canvasEl.getBoundingClientRect();
   const pt = screenToCanvas(e.clientX - r.left, e.clientY - r.top);
+  if (movingImage && selectedEl) {
+    movingImage.moved = true;
+    scene = updateElement(scene, selectedEl.id, {
+      x: pt.x - movingImage.offsetX,
+      y: pt.y - movingImage.offsetY,
+    });
+    render();
+    return;
+  }
   if (draggingHandle && selectedEl) {
     const live = scene.elements.find(e => e.id === selectedEl.id);
     if (live) {
-      if (draggingHandle === 'start') {
+      if (live.type === 'image') {
+        scene = updateElement(scene, live.id, resizeImage(live, draggingHandle, pt));
+      } else if (draggingHandle === 'start') {
         scene = updateElement(scene, live.id, { x1: pt.x, y1: pt.y });
       } else if (draggingHandle === 'end') {
         scene = updateElement(scene, live.id, { x2: pt.x, y2: pt.y });
@@ -402,6 +506,17 @@ window.addEventListener('mouseup', (e) => {
     hist = historyPush(hist, scene);
     updateHistoryButtons();
     scheduleAutoSave();
+    render();
+    return;
+  }
+  if (movingImage) {
+    const moved = movingImage.moved;
+    movingImage = null;
+    if (moved) {
+      hist = historyPush(hist, scene);
+      updateHistoryButtons();
+      scheduleAutoSave();
+    }
     render();
     return;
   }

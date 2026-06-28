@@ -57,6 +57,12 @@ describe('hitTestElement', () => {
     expect(hitTestElement({ x: 50, y: 3 }, el)).toBe(true);
   });
 
+  it('delegates to a bounds check for image elements', () => {
+    const el = { type: 'image', x: 0, y: 0, width: 100, height: 100 };
+    expect(hitTestElement({ x: 50, y: 50 }, el)).toBe(true);
+    expect(hitTestElement({ x: 200, y: 200 }, el)).toBe(false);
+  });
+
   it('delegates to hitTestText for text elements', () => {
     // hitTestText checks x >= el.x, y >= el.y, x <= el.x+400, y <= el.y + fontSize*1.4*lines
     const el = { type: 'text', x: 10, y: 10, fontSize: 18, content: 'hi' };

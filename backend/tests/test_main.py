@@ -129,3 +129,26 @@ def test_delete_canvas(client):
 def test_delete_canvas_not_found(client):
     r = client.delete("/api/canvases/000000000000000000000001")
     assert r.status_code == 404
+
+
+# ── upload image asset ───────────────────────────────────────────────────────
+
+def test_upload_returns_unique_filename(client):
+    png = b"\x89PNG\r\n\x1a\n fake image bytes"
+    r = client.post("/api/uploads", files={"file": ("photo.png", png, "image/png")})
+    assert r.status_code == 201
+    body = r.json()
+    assert "filename" in body
+    # filename is unique (not the original) but keeps the extension
+    assert body["filename"] != "photo.png"
+    assert body["filename"].endswith(".png")
+
+
+def test_uploaded_file_is_served(client):
+    png = b"\x89PNG\r\n\x1a\n served bytes"
+    filename = client.post(
+        "/api/uploads", files={"file": ("a.png", png, "image/png")}
+    ).json()["filename"]
+    got = client.get(f"/uploads/{filename}")
+    assert got.status_code == 200
+    assert got.content == png
