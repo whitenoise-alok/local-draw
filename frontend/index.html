@@ -9,7 +9,11 @@
 <body>
   <header class="topbar">
     <span class="app-title">Local Draw</span>
-    <button id="new-canvas-btn" class="btn-primary">+ New canvas</button>
+    <div class="topbar-actions">
+      <button id="import-svg-btn" class="btn-secondary">Import SVG</button>
+      <button id="new-canvas-btn" class="btn-primary">+ New canvas</button>
+    </div>
+    <input id="import-svg-input" type="file" accept=".svg,image/svg+xml" hidden />
   </header>
   <main class="list-page">
     <ul id="canvas-list" class="canvas-list"></ul>

@@ -11,6 +11,7 @@ import {
   bringToFrontMany, sendToBackMany, bringForwardMany, sendBackwardMany,
 } from './core/selection.js';
 import { copyElements, pasteElements } from './core/clipboard.js';
+import { sceneToSvg } from './core/svg.js';
 import { renderProperties } from './ui/properties.js';
 import { renderSelectionProperties } from './ui/selection-properties.js';
 import { toRect } from './tools/rect.js';
@@ -448,9 +449,24 @@ async function doSave() {
   }
 }
 
-// ── Export placeholder ────────────────────────────────────────
+// ── Export ────────────────────────────────────────────────────
+// Serializes the scene to a valid SVG (with the full scene embedded as metadata
+// for round-trip import) and downloads it named after the canvas.
+let canvasName = 'Untitled';
+
+function safeFilename(name) {
+  return (name.trim() || 'Untitled').replace(/[\\/:*?"<>|]+/g, '_');
+}
+
 document.getElementById('export-btn').addEventListener('click', () => {
-  alert('SVG export coming soon.');
+  const svg = sceneToSvg({ name: canvasName, elements: scene.elements });
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${safeFilename(canvasName)}.svg`;
+  a.click();
+  URL.revokeObjectURL(url);
 });
 
 // ── Tool switching ────────────────────────────────────────────
@@ -785,6 +801,7 @@ window.addEventListener('keyup', (e) => {
 async function init() {
   try {
     const data = await getCanvas(canvasId);
+    canvasName = data.name;
     document.getElementById('canvas-name').textContent = data.name;
     document.title = `${data.name} — Local Draw`;
     scene = createScene(data.elements || []);

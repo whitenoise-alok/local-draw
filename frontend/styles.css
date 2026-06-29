@@ -61,6 +61,12 @@ body {
   font-weight: 600;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 /* ── List page ───────────────────────────────────── */
 
 .list-page {

@@ -1,4 +1,5 @@
-import { listCanvases, createCanvas, renameCanvas, deleteCanvas } from '../core/api.js';
+import { listCanvases, createCanvas, saveCanvas, renameCanvas, deleteCanvas } from '../core/api.js';
+import { svgToScene } from '../core/svg.js';
 
 function formatDate(iso) {
   return new Date(iso).toLocaleString(undefined, {
@@ -89,6 +90,25 @@ async function init() {
   newBtn.addEventListener('click', async () => {
     const canvas = await createCanvas('Untitled');
     window.location.href = `/canvas.html?id=${canvas.id}`;
+  });
+
+  // Import: parse the SVG's embedded scene metadata, create a canvas from it,
+  // and open it. Errors (e.g. an SVG with no metadata) surface to the user.
+  const importBtn = document.getElementById('import-svg-btn');
+  const importInput = document.getElementById('import-svg-input');
+  importBtn.addEventListener('click', () => importInput.click());
+  importInput.addEventListener('change', async () => {
+    const file = importInput.files?.[0];
+    importInput.value = '';  // allow re-importing the same file later
+    if (!file) return;
+    try {
+      const { name, elements } = svgToScene(await file.text());
+      const canvas = await createCanvas(name || file.name.replace(/\.svg$/i, ''));
+      await saveCanvas(canvas.id, elements, '');
+      window.location.href = `/canvas.html?id=${canvas.id}`;
+    } catch (err) {
+      alert(err.message || 'Failed to import SVG.');
+    }
   });
 }
 
