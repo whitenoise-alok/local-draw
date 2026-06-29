@@ -38,7 +38,7 @@ export function renderProperties(bar, toolName, tool) {
   }
 }
 
-function colorGroup(label, colors, current, onChange) {
+export function colorGroup(label, colors, current, onChange) {
   const g = el('div', 'prop-group');
   g.appendChild(el('span', 'prop-label', label));
   const row = el('div', 'prop-swatches');
@@ -57,7 +57,7 @@ function colorGroup(label, colors, current, onChange) {
   return g;
 }
 
-function widthGroup(current, onChange) {
+export function widthGroup(current, onChange) {
   const g = el('div', 'prop-group');
   g.appendChild(el('span', 'prop-label', 'Width'));
   const row = el('div', 'prop-buttons');
@@ -74,7 +74,7 @@ function widthGroup(current, onChange) {
   return g;
 }
 
-function strokeStyleGroup(current, onChange) {
+export function strokeStyleGroup(current, onChange) {
   const g = el('div', 'prop-group');
   g.appendChild(el('span', 'prop-label', 'Style'));
   const row = el('div', 'prop-buttons');
@@ -92,7 +92,7 @@ function strokeStyleGroup(current, onChange) {
   return g;
 }
 
-function opacityGroup(current, onChange) {
+export function opacityGroup(current, onChange) {
   const g = el('div', 'prop-group');
   g.appendChild(el('span', 'prop-label', 'Opacity'));
   const row = el('div', 'prop-buttons');
@@ -143,7 +143,7 @@ function fontSizeGroup(current, onChange) {
   return g;
 }
 
-function el(tag, cls, text) {
+export function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
   if (text != null) e.textContent = text;

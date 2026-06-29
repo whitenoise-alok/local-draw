@@ -6,7 +6,13 @@ import { createTextTool, drawText, hitTestText } from './tools/text.js';
 import { createLineTool, createArrowTool, drawLine, drawArrow, midpointHandle } from './tools/line.js';
 import { createEraserTool } from './tools/eraser.js';
 import { createImageTool, createImageElement, drawImage, hitTestImage, imageHandles, resizeImage } from './tools/image.js';
+import {
+  elementBounds, selectInBox, translateElements, removeElements, applySharedProp,
+  bringToFrontMany, sendToBackMany, bringForwardMany, sendBackwardMany,
+} from './core/selection.js';
 import { renderProperties } from './ui/properties.js';
+import { renderSelectionProperties } from './ui/selection-properties.js';
+import { toRect } from './tools/rect.js';
 
 // ── Bootstrap ─────────────────────────────────────────────────
 const params = new URLSearchParams(location.search);
@@ -113,8 +119,9 @@ const imageTool = createImageTool({
       const center = screenToCanvas(canvasEl.width / 2, canvasEl.height / 2);
       const el = createImageElement(filename, img.naturalWidth, img.naturalHeight, center);
       commitElement(el);
-      selectedEl = el;
       setTool('select');
+      selectedIds = [el.id];
+      syncSelectionUI();
       render();
     } catch (err) {
       console.error('Image upload failed:', err);
@@ -127,11 +134,46 @@ let activeToolName = 'select';
 let prevTool = null;
 let spaceDown = false;
 
-// ── Select-tool handle state ──────────────────────────────────
+// ── Selection state ───────────────────────────────────────────
 const HANDLE_R = 6;
-let selectedEl = null;
+let selectedIds = [];      // ids of every currently selected element
 let draggingHandle = null; // line: 'start'|'end'|'mid' — image: 'nw'|'ne'|'sw'|'se'
-let movingImage = null;    // { offsetX, offsetY, moved } while dragging an image body
+let movingSelection = null; // { lastPt, moved } while dragging the selection as a group
+let marquee = null;        // { start, cur } while drawing a selection box
+
+function selectedElements() {
+  const set = new Set(selectedIds);
+  return scene.elements.filter(el => set.has(el.id));
+}
+
+// The single live element when exactly one is selected — drives the per-type
+// resize handles (line endpoints, image corners). Null for empty/multi selects.
+function singleSelected() {
+  if (selectedIds.length !== 1) return null;
+  return scene.elements.find(el => el.id === selectedIds[0]) ?? null;
+}
+
+function hitTestElement(pt, el) {
+  if (el.type === 'image') return hitTestImage(pt, el);
+  if (el.type === 'text') return hitTestText(pt, el);
+  if (el.type === 'line' || el.type === 'arrow') return hitTestLine(pt, el);
+  if (el.type === 'rect') {
+    return pt.x >= el.x && pt.x <= el.x + el.width && pt.y >= el.y && pt.y <= el.y + el.height;
+  }
+  return false;
+}
+
+// Topmost non-text element under the pointer (text is handled separately so a
+// click opens its editor). Highest order wins.
+function topmostHit(pt) {
+  return [...scene.elements]
+    .sort((a, b) => (b.order ?? 0) - (a.order ?? 0))
+    .find(el => el.type !== 'text' && hitTestElement(pt, el)) ?? null;
+}
+
+function hitAnySelected(pt) {
+  return selectedElements().some(el => hitTestElement(pt, el));
+}
 
 function hitImageHandle(pt, el) {
   const handles = imageHandles(el);
@@ -255,17 +297,60 @@ function render() {
 
   tools[activeToolName]?.renderPreview?.(ctx);
 
-  if (selectedEl && (selectedEl.type === 'line' || selectedEl.type === 'arrow')) {
-    const live = scene.elements.find(e => e.id === selectedEl.id);
-    if (live) drawHandles(ctx, live);
-  }
+  drawSelection(ctx);
 
-  if (selectedEl && selectedEl.type === 'image') {
-    const live = scene.elements.find(e => e.id === selectedEl.id);
-    if (live) drawImageSelection(ctx, live);
-  }
+  if (marquee) drawMarquee(ctx, toRect(marquee.start, marquee.cur));
 
   ctx.restore();
+}
+
+function drawSelection(c) {
+  const sel = selectedElements();
+  if (sel.length === 1) {
+    const el = sel[0];
+    if (el.type === 'line' || el.type === 'arrow') drawHandles(c, el);
+    else if (el.type === 'image') drawImageSelection(c, el);
+    else drawOutline(c, el);
+  } else if (sel.length > 1) {
+    sel.forEach(el => drawOutline(c, el));
+    drawGroupBox(c, sel);
+  }
+}
+
+function drawOutline(c, el) {
+  const b = elementBounds(el);
+  c.save();
+  c.strokeStyle = '#0066ff';
+  c.lineWidth = 1;
+  c.setLineDash([4, 3]);
+  c.strokeRect(b.x, b.y, b.width, b.height);
+  c.restore();
+}
+
+function drawGroupBox(c, els) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  els.forEach(el => {
+    const b = elementBounds(el);
+    minX = Math.min(minX, b.x); minY = Math.min(minY, b.y);
+    maxX = Math.max(maxX, b.x + b.width); maxY = Math.max(maxY, b.y + b.height);
+  });
+  c.save();
+  c.strokeStyle = '#0066ff';
+  c.lineWidth = 1.5;
+  c.setLineDash([]);
+  c.strokeRect(minX, minY, maxX - minX, maxY - minY);
+  c.restore();
+}
+
+function drawMarquee(c, box) {
+  c.save();
+  c.strokeStyle = '#0066ff';
+  c.fillStyle = 'rgba(0, 102, 255, 0.08)';
+  c.lineWidth = 1;
+  c.setLineDash([4, 3]);
+  c.fillRect(box.x, box.y, box.width, box.height);
+  c.strokeRect(box.x, box.y, box.width, box.height);
+  c.restore();
 }
 
 function resize() {
@@ -283,8 +368,9 @@ function commitElement(el) {
   updateHistoryButtons();
   scheduleAutoSave();
   if (el.type === 'line' || el.type === 'arrow') {
-    selectedEl = el;
     setTool('select');
+    selectedIds = [el.id];
+    syncSelectionUI();
   }
   render();
 }
@@ -380,12 +466,50 @@ function setTool(name) {
   }
   tools[activeToolName]?.cancel?.();
   activeToolName = name;
-  if (name !== 'select') { selectedEl = null; draggingHandle = null; movingImage = null; }
+  if (name !== 'select') { selectedIds = []; draggingHandle = null; movingSelection = null; marquee = null; }
   canvasEl.style.cursor = CURSOR[name] ?? 'default';
   document.querySelectorAll('.tool-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tool === name);
   });
   renderProperties(propertiesBar, name, tools[name]);
+  if (name === 'select') syncSelectionUI();
+}
+
+// ── Selection plumbing ────────────────────────────────────────
+// Refreshes the property bar to match the current selection: the shared-style /
+// ordering / delete controls when something is selected, empty otherwise.
+function syncSelectionUI() {
+  if (activeToolName !== 'select') return;
+  if (selectedIds.length === 0) { propertiesBar.innerHTML = ''; return; }
+  renderSelectionProperties(propertiesBar, selectionApi());
+}
+
+function commitSelectionChange() {
+  hist = historyPush(hist, scene);
+  updateHistoryButtons();
+  scheduleAutoSave();
+  render();
+}
+
+function selectionApi() {
+  const order = (fn) => () => { scene = fn(scene, selectedIds); commitSelectionChange(); };
+  return {
+    elements: selectedElements(),
+    onSetProp: (key, value) => {
+      scene = applySharedProp(scene, selectedIds, key, value);
+      commitSelectionChange();
+    },
+    onBringToFront: order(bringToFrontMany),
+    onSendToBack: order(sendToBackMany),
+    onBringForward: order(bringForwardMany),
+    onSendBackward: order(sendBackwardMany),
+    onDelete: () => {
+      scene = removeElements(scene, selectedIds);
+      selectedIds = [];
+      syncSelectionUI();
+      commitSelectionChange();
+    },
+  };
 }
 
 document.getElementById('toolbar').addEventListener('click', (e) => {
@@ -412,38 +536,52 @@ canvasEl.addEventListener('mousedown', (e) => {
     tools.text.pointerdown(pt, r);
     return;
   }
+  if (activeToolName === 'select') {
+    // Resize handles on a lone selection (handles can sit outside the body).
+    const single = singleSelected();
+    if (single && (single.type === 'line' || single.type === 'arrow')) {
+      const h = hitHandle(pt, single);
+      if (h) { draggingHandle = h; return; }
+    }
+    if (single && single.type === 'image') {
+      const h = hitImageHandle(pt, single);
+      if (h) { draggingHandle = h; return; }
+    }
+    // Dragging an existing selection moves the whole group. Checked before the
+    // text-edit shortcut so grouped text can be dragged rather than opened.
+    if (selectedIds.length && hitAnySelected(pt)) {
+      movingSelection = { lastPt: pt, moved: false };
+      return;
+    }
+    // Click a text element → edit it.
+    const textHit = scene.elements.find(el => el.type === 'text' && hitTestText(pt, el));
+    if (textHit) {
+      setTool('text');
+      tools.text.editExisting(textHit, r);
+      return;
+    }
+    // Click any other element → select it and start moving.
+    const hit = topmostHit(pt);
+    if (hit) {
+      selectedIds = [hit.id];
+      movingSelection = { lastPt: pt, moved: false };
+      syncSelectionUI();
+      render();
+      return;
+    }
+    // Empty canvas → begin a selection box.
+    selectedIds = [];
+    marquee = { start: pt, cur: pt };
+    syncSelectionUI();
+    render();
+    return;
+  }
+  // Non-select tools: clicking a text element still opens its editor.
   const textHit = activeToolName !== 'eraser'
     && scene.elements.find(el => el.type === 'text' && hitTestText(pt, el));
   if (textHit) {
     if (activeToolName !== 'text') setTool('text');
     tools.text.editExisting(textHit, r);
-    return;
-  }
-  if (activeToolName === 'select') {
-    // Check if clicking a handle on the selected element
-    if (selectedEl) {
-      const live = scene.elements.find(e => e.id === selectedEl.id);
-      if (live && (live.type === 'line' || live.type === 'arrow')) {
-        const h = hitHandle(pt, live);
-        if (h) { draggingHandle = h; return; }
-      }
-      if (live && live.type === 'image') {
-        const h = hitImageHandle(pt, live);
-        if (h) { draggingHandle = h; return; }
-      }
-    }
-    // Topmost image under the pointer wins; fall back to a line/arrow.
-    const imageHit = [...scene.elements]
-      .sort((a, b) => (b.order ?? 0) - (a.order ?? 0))
-      .find(el => el.type === 'image' && hitTestImage(pt, el));
-    const lineHit = !imageHit && scene.elements.find(el =>
-      (el.type === 'line' || el.type === 'arrow') && hitTestLine(pt, el)
-    );
-    selectedEl = imageHit ?? lineHit ?? null;
-    if (imageHit) {
-      movingImage = { offsetX: pt.x - imageHit.x, offsetY: pt.y - imageHit.y, moved: false };
-    }
-    render();
     return;
   }
   tools[activeToolName]?.pointerdown(pt);
@@ -459,17 +597,24 @@ window.addEventListener('mousemove', (e) => {
   }
   const r = canvasEl.getBoundingClientRect();
   const pt = screenToCanvas(e.clientX - r.left, e.clientY - r.top);
-  if (movingImage && selectedEl) {
-    movingImage.moved = true;
-    scene = updateElement(scene, selectedEl.id, {
-      x: pt.x - movingImage.offsetX,
-      y: pt.y - movingImage.offsetY,
-    });
+  if (marquee) {
+    marquee.cur = pt;
     render();
     return;
   }
-  if (draggingHandle && selectedEl) {
-    const live = scene.elements.find(e => e.id === selectedEl.id);
+  if (movingSelection) {
+    const dx = pt.x - movingSelection.lastPt.x;
+    const dy = pt.y - movingSelection.lastPt.y;
+    movingSelection.lastPt = pt;
+    if (dx !== 0 || dy !== 0) {
+      movingSelection.moved = true;
+      scene = translateElements(scene, selectedIds, dx, dy);
+      render();
+    }
+    return;
+  }
+  if (draggingHandle) {
+    const live = singleSelected();
     if (live) {
       if (live.type === 'image') {
         scene = updateElement(scene, live.id, resizeImage(live, draggingHandle, pt));
@@ -509,14 +654,24 @@ window.addEventListener('mouseup', (e) => {
     render();
     return;
   }
-  if (movingImage) {
-    const moved = movingImage.moved;
-    movingImage = null;
+  if (movingSelection) {
+    const moved = movingSelection.moved;
+    movingSelection = null;
     if (moved) {
       hist = historyPush(hist, scene);
       updateHistoryButtons();
       scheduleAutoSave();
     }
+    render();
+    return;
+  }
+  if (marquee) {
+    const box = toRect(marquee.start, marquee.cur);
+    marquee = null;
+    if (box.width > 2 || box.height > 2) {
+      selectedIds = selectInBox(scene.elements, box);
+    }
+    syncSelectionUI();
     render();
     return;
   }
@@ -568,6 +723,17 @@ window.addEventListener('keydown', (e) => {
       e.preventDefault();
       applyHistory(historyRedo(hist));
     }
+    return;
+  }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && activeToolName === 'select' && selectedIds.length) {
+    e.preventDefault();
+    scene = removeElements(scene, selectedIds);
+    selectedIds = [];
+    hist = historyPush(hist, scene);
+    updateHistoryButtons();
+    scheduleAutoSave();
+    syncSelectionUI();
+    render();
     return;
   }
   const tool = KEY_TOOL[e.key.toLowerCase()];
