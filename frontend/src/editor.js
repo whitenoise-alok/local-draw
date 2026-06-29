@@ -10,6 +10,7 @@ import {
   elementBounds, selectInBox, translateElements, removeElements, applySharedProp,
   bringToFrontMany, sendToBackMany, bringForwardMany, sendBackwardMany,
 } from './core/selection.js';
+import { copyElements, pasteElements } from './core/clipboard.js';
 import { renderProperties } from './ui/properties.js';
 import { renderSelectionProperties } from './ui/selection-properties.js';
 import { toRect } from './tools/rect.js';
@@ -140,6 +141,7 @@ let selectedIds = [];      // ids of every currently selected element
 let draggingHandle = null; // line: 'start'|'end'|'mid' — image: 'nw'|'ne'|'sw'|'se'
 let movingSelection = null; // { lastPt, moved } while dragging the selection as a group
 let marquee = null;        // { start, cur } while drawing a selection box
+let clipboard = [];        // internal copy/paste snapshot (never the system clipboard)
 
 function selectedElements() {
   const set = new Set(selectedIds);
@@ -512,6 +514,30 @@ function selectionApi() {
   };
 }
 
+// ── Copy / paste ──────────────────────────────────────────────
+// Snapshots the current selection into the internal clipboard. Empty selection
+// leaves the clipboard untouched, so a stray Ctrl+C never clears it.
+function copySelection() {
+  if (!selectedIds.length) return;
+  clipboard = copyElements(selectedElements());
+}
+
+// Pastes the clipboard as a fresh group of elements, offset and stacked on top,
+// then selects them. Re-snapshots so repeated pastes keep stepping away.
+function pasteClipboard() {
+  if (!clipboard.length) return;
+  const pasted = pasteElements(clipboard, { newId: () => crypto.randomUUID() });
+  pasted.forEach(el => { scene = addElement(scene, el); });
+  scene = bringToFrontMany(scene, pasted.map(el => el.id));
+  selectedIds = pasted.map(el => el.id);
+  clipboard = copyElements(selectedElements());
+  hist = historyPush(hist, scene);
+  updateHistoryButtons();
+  scheduleAutoSave();
+  syncSelectionUI();
+  render();
+}
+
 document.getElementById('toolbar').addEventListener('click', (e) => {
   const btn = e.target.closest('.tool-btn');
   if (btn?.dataset.tool) setTool(btn.dataset.tool);
@@ -722,6 +748,12 @@ window.addEventListener('keydown', (e) => {
     } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
       e.preventDefault();
       applyHistory(historyRedo(hist));
+    } else if (e.key === 'c' && activeToolName === 'select') {
+      e.preventDefault();
+      copySelection();
+    } else if (e.key === 'v' && activeToolName === 'select') {
+      e.preventDefault();
+      pasteClipboard();
     }
     return;
   }
